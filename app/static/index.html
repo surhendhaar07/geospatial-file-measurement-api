@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geospatial File Measurement Studio</title>
+  <meta name="description" content="Production-grade geospatial vector measurement, CRS projection, and feature analytics platform.">
+  
+  <!-- Modern Typography (Plus Jakarta Sans) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet Map CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  
+  <!-- Custom Light Theme Styles -->
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+
+  <!-- Top Navigation & Brand Header -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand-wrapper">
+        <div class="brand-icon">📐</div>
+        <div>
+          <h1 class="brand-title">Geospatial File Measurement Studio</h1>
+          <p class="brand-subtitle">Automated CRS Detection • Dynamic Metric UTM Projection • Vector Analytics</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="status-badge">
+          <span class="status-dot"></span>
+          <span id="apiStatusText">Checking Service...</span>
+        </div>
+        <a href="/docs" target="_blank" class="btn btn-secondary">Swagger UI</a>
+        <a href="/redoc" target="_blank" class="btn btn-secondary">ReDoc</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Application Container -->
+  <main class="main-container">
+
+    <!-- 1. Upload & Client-Side Pre-Validation Card -->
+    <section class="upload-card">
+      <div class="card-header">
+        <div class="card-title">
+          <span>📤</span>
+          <span>Geospatial File Ingestion & Format Verification</span>
+        </div>
+        <div class="sample-buttons">
+          <button class="btn btn-secondary btn-xs" onclick="loadSampleKml()">⚡ Try Sample KML</button>
+          <button class="btn btn-secondary btn-xs" onclick="loadSampleShapefile()">⚡ Try Sample Shapefile</button>
+        </div>
+      </div>
+
+      <!-- Drag & Drop Zone -->
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-icon">📁</div>
+        <div class="dropzone-text">Drag & drop your geospatial file here, or click to browse</div>
+        <div class="dropzone-hint">Accepted formats: <strong>Shapefile package (.zip)</strong> or <strong>OGC KML (.kml)</strong> (Max 50MB)</div>
+        <input type="file" id="fileInput" accept=".zip,.kml">
+      </div>
+
+      <!-- Real-Time Format Pre-Validation Inspector Panel -->
+      <div class="validation-panel" id="validationPanel">
+        <div class="val-row">
+          <div class="val-file-info">
+            <span class="val-icon" id="valIcon">📄</span>
+            <div>
+              <div class="val-filename" id="valFilename">filename.zip</div>
+              <div class="val-meta" id="valMeta">Size: 0 KB</div>
+            </div>
+          </div>
+          <span class="val-badge" id="valBadge">Format Verified</span>
+        </div>
+        <div class="val-message" id="valMessage"></div>
+      </div>
+
+      <div style="margin-top: 1.25rem; display: flex; justify-content: flex-end;">
+        <button class="btn btn-primary" id="btnUpload" disabled>
+          <span>⚡ Process & Calculate Measurements</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 2. Metrics & Analytics Overview Dashboard -->
+    <section id="dashboardSection">
+      <div class="stats-grid">
+        <!-- Stat 1: Feature Counts -->
+        <div class="stat-card">
+          <div class="stat-icon features">📊</div>
+          <div class="stat-content">
+            <div class="stat-label">Total Features</div>
+            <div class="stat-value" id="statTotalFeatures">&mdash;</div>
+            <div class="stat-sub" id="statFeaturesSub">Polygons • Lines • Points</div>
+          </div>
+        </div>
+
+        <!-- Stat 2: CRS & Projections -->
+        <div class="stat-card">
+          <div class="stat-icon crs">🌐</div>
+          <div class="stat-content">
+            <div class="stat-label">CRS Transformation</div>
+            <div class="stat-value" id="statTargetCrs" style="font-size: 1.15rem;">&mdash;</div>
+            <div class="stat-sub">Source: <span id="statSourceCrs">&mdash;</span></div>
+          </div>
+        </div>
+
+        <!-- Stat 3: Total Area -->
+        <div class="stat-card">
+          <div class="stat-icon area">🟩</div>
+          <div class="stat-content">
+            <div class="stat-label">Total Measured Area</div>
+            <div class="stat-value" id="statTotalArea">&mdash;</div>
+            <div class="stat-sub">Calculated via Projected UTM</div>
+          </div>
+        </div>
+
+        <!-- Stat 4: Total Length -->
+        <div class="stat-card">
+          <div class="stat-icon length">📏</div>
+          <div class="stat-content">
+            <div class="stat-label">Total Measured Length</div>
+            <div class="stat-value" id="statTotalLength">&mdash;</div>
+            <div class="stat-sub">Linear distance in meters</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Split Visualizer: Interactive Map & Feature Table -->
+    <section class="content-grid">
+      
+      <!-- Interactive Leaflet Map -->
+      <div class="map-card">
+        <div class="map-header">
+          <div class="card-title">
+            <span>🗺️</span>
+            <span>Spatial Map View</span>
+          </div>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">CartoDB Positron Light Tiles</span>
+        </div>
+        <div id="map"></div>
+        <div class="map-legend">
+          <div class="legend-item"><span class="legend-swatch polygon"></span> Polygons (Area)</div>
+          <div class="legend-item"><span class="legend-swatch line"></span> LineStrings (Length)</div>
+          <div class="legend-item"><span class="legend-swatch point"></span> Points</div>
+        </div>
+      </div>
+
+      <!-- Feature Measurements Data Table -->
+      <div class="table-card">
+        <div class="card-title" style="margin-bottom: 0.85rem;">
+          <span>📋</span>
+          <span>Feature Measurements</span>
+        </div>
+        <div class="table-toolbar">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="tableSearch" placeholder="Search features or attributes...">
+          </div>
+          <select id="filterGeometry" class="filter-select">
+            <option value="ALL">All Geometries</option>
+            <option value="Polygon">Polygons</option>
+            <option value="Line">LineStrings</option>
+            <option value="Point">Points</option>
+          </select>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th># ID</th>
+                <th>Type</th>
+                <th>Measurement</th>
+                <th>Unit</th>
+                <th>Status</th>
+                <th>Properties</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <tr>
+                <td colspan="7" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+                  Upload a geospatial file (.zip Shapefile or .kml) to view feature measurements.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- 4. Recent Uploads History Section -->
+    <section class="history-section">
+      <div class="card-title">
+        <span>🕒</span>
+        <span>Recent Processed Files</span>
+      </div>
+      <div class="history-list" id="recentFilesList">
+        <div style="font-size: 0.85rem; color: var(--text-muted);">Loading recent files...</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Properties Inspector Modal -->
+  <div class="modal-overlay" id="propsModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <strong id="modalTitle">Feature Properties</strong>
+        <button class="btn btn-secondary btn-xs" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <pre class="json-pre" id="modalContent"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS Library -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <!-- Interactive App Script -->
+  <script src="/static/js/app.js"></script>
+
+</body>
+</html>

@@ -4,7 +4,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api import api_router
 from app.core.config import get_settings
@@ -22,14 +23,15 @@ async def lifespan(app: FastAPI):
     Initializes database schema and ensures required filesystem storage directories exist.
     """
     logger.info("Initializing Geospatial File Measurement API application...")
-    
-    # Ensure upload and temp working directories exist
+
+    # Ensure upload, temp, and sample data working directories exist
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(settings.TEMP_DIR, exist_ok=True)
-    
+    os.makedirs("data/sample_data", exist_ok=True)
+
     # Initialize database tables
     init_db()
-    
+
     logger.info("Application startup completed successfully.")
     yield
     logger.info("Application shutdown completed.")
@@ -47,7 +49,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # CORS Middleware
@@ -74,9 +76,9 @@ async def handle_geospatial_api_exception(request: Request, exc: GeospatialAPIEx
             "error": {
                 "code": exc.code,
                 "message": exc.message,
-                "details": exc.details
+                "details": exc.details,
             }
-        }
+        },
     )
 
 
@@ -86,13 +88,12 @@ async def handle_validation_error(request: Request, exc: RequestValidationError)
     Transforms Pydantic validation errors into the standardized error envelope.
     """
     logger.warning(f"Request validation error on {request.url.path}: {exc.errors()}")
-    # Clean errors for JSON serialization
     clean_errors = []
     for err in exc.errors():
         clean_errors.append({
             "loc": list(err.get("loc", [])),
             "msg": err.get("msg", ""),
-            "type": err.get("type", "")
+            "type": err.get("type", ""),
         })
 
     return JSONResponse(
@@ -101,9 +102,9 @@ async def handle_validation_error(request: Request, exc: RequestValidationError)
             "error": {
                 "code": "VALIDATION_ERROR",
                 "message": "Invalid request payload or parameters.",
-                "details": clean_errors
+                "details": clean_errors,
             }
-        }
+        },
     )
 
 
@@ -119,9 +120,9 @@ async def handle_http_exception(request: Request, exc: HTTPException):
             "error": {
                 "code": f"HTTP_{exc.status_code}",
                 "message": str(exc.detail),
-                "details": None
+                "details": None,
             }
-        }
+        },
     )
 
 
@@ -138,20 +139,42 @@ async def handle_unexpected_exception(request: Request, exc: Exception):
             "error": {
                 "code": "INTERNAL_SERVER_ERROR",
                 "message": "An unexpected error occurred while processing the request. Please contact support.",
-                "details": None
+                "details": None,
             }
-        }
+        },
     )
 
 
-# Include API routers under prefix
+# Include API routers under /api prefix (unchanged)
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Mount Static Assets & Sample Datasets for Web UI
+if os.path.exists("app/static"):
+    app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+if os.path.exists("data/sample_data"):
+    app.mount("/data/sample_data", StaticFiles(directory="data/sample_data"), name="sample_data")
+
+
+@app.get("/ui", tags=["Web UI"], summary="Interactive Geospatial Measurement Studio UI")
+@app.get("/dashboard", tags=["Web UI"], summary="Interactive Geospatial Measurement Studio UI")
+def serve_web_ui():
+    """
+    Serves the interactive light-theme Geospatial File Measurement Studio UI.
+    """
+    index_path = os.path.join("app", "static", "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"error": {"code": "NOT_FOUND", "message": "UI static file not found."}}
+    )
 
 
 @app.get("/", tags=["Root"], summary="Root service entry point")
 def root_redirect():
     """
-    Returns general metadata, service status, and links to interactive OpenAPI documentation.
+    Returns general metadata, service status, and links to interactive OpenAPI documentation and Web UI.
     """
     return {
         "service": settings.PROJECT_NAME,
@@ -159,12 +182,14 @@ def root_redirect():
         "documentation": {
             "swagger_ui": "/docs",
             "redoc": "/redoc",
-            "openapi_json": "/openapi.json"
+            "openapi_json": "/openapi.json",
+            "web_ui": "/ui",
         },
         "endpoints": {
             "upload_file": "POST /api/files/",
             "get_file_info": "GET /api/files/{id}/",
             "get_measurements": "GET /api/files/{id}/measurements/",
-            "health_check": "GET /api/health"
-        }
+            "health_check": "GET /api/health",
+            "web_ui": "GET /ui",
+        },
     }

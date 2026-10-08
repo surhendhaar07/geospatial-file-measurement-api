@@ -121,3 +121,16 @@ def test_root_endpoint(client: TestClient):
     assert data["status"] == "online"
     assert "documentation" in data
     assert data["documentation"]["swagger_ui"] == "/docs"
+    assert data["documentation"]["web_ui"] == "/ui"
+
+
+def test_web_ui_endpoints(client: TestClient):
+    res_ui = client.get("/ui")
+    assert res_ui.status_code == 200
+    assert "text/html" in res_ui.headers["content-type"]
+    assert "Geospatial File Measurement Studio" in res_ui.text
+
+    res_dash = client.get("/dashboard")
+    assert res_dash.status_code == 200
+    assert "text/html" in res_dash.headers["content-type"]
+

@@ -241,7 +241,8 @@ class FileService:
                     value=meas.value if meas else None,
                     unit=meas.unit if meas else None,
                     status=meas.status if meas else "FAILED",
-                    properties=feat.properties
+                    properties=feat.properties,
+                    geometry=feat.geometry
                 )
             )
 

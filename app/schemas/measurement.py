@@ -16,6 +16,7 @@ class FeatureMeasurementItem(BaseModel):
     unit: str | None = Field(None, description="Measurement unit ('square_meters', 'meters', or null)")
     status: str = Field(..., description="Measurement status: COMPLETED, NOT_REQUIRED, NOT_SUPPORTED, or FAILED")
     properties: dict[str, Any] | None = Field(default_factory=dict, description="Feature attributes/properties")
+    geometry: dict[str, Any] | None = Field(default=None, description="GeoJSON-compatible geometry representation")
 
 
 class FileMeasurementsResponse(BaseModel):

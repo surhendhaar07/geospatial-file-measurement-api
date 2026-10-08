@@ -119,6 +119,11 @@ geospatial-measurement-api/
 │   │   ├── feature_repository.py
 │   │   └── measurement_repository.py
 │   │
+│   ├── static/                  # Interactive Light-Theme Web UI
+│   │   ├── index.html           # Main studio single-page interface
+│   │   ├── css/styles.css       # Clean light-theme design system styles
+│   │   └── js/app.js            # Client-side pre-validation, Leaflet map & analytics
+│   │
 │   └── utils/                   # Utilities & Validation
 │       ├── file_validation.py   # Extension check, Zip-Slip prevention, Shapefile verification
 │       └── geometry_utils.py    # GeoJSON serialization & property sanitization
@@ -488,6 +493,18 @@ curl -X GET "http://localhost:8000/api/files/d93b39ae-f17b-4225-9299-d54e7990c31
 
 ---
 
+#### 6. Interactive Geospatial Measurement Studio (Web UI)
+- **Method**: `GET`
+- **Path**: `/ui` (or `/dashboard`)
+- **Description**: Serves the executive light-theme single-page dashboard featuring:
+  - Real-time drag-and-drop file upload with pre-flight format and size verification.
+  - Interactive Leaflet map visualizing extracted geometries.
+  - Metrics cards (total features, source CRS, UTM projection, total area, total length).
+  - Searchable, filterable measurements data table with zoom-to-feature actions.
+  - Recent uploads history drawer.
+
+---
+
 ### Standard Error Envelope
 
 All API errors return a standardized JSON structure with machine-readable codes and descriptive messages:
@@ -523,7 +540,7 @@ All API errors return a standardized JSON structure with machine-readable codes 
 
 ## 7. Testing & Verification
 
-The project includes 39 unit and integration tests covering all critical requirements.
+The project includes **40 unit and integration tests** covering all critical requirements.
 
 ### Running Automated Tests
 ```bash

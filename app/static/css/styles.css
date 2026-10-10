@@ -253,7 +253,7 @@ body {
   border: 2px dashed var(--border-subtle);
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
-  padding: 2.25rem 1.5rem;
+  padding: 1.5rem 1.25rem;
   text-align: center;
   cursor: pointer;
   transition: all var(--transition-normal);
@@ -326,6 +326,13 @@ body {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.75rem;
+}
+
+.val-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .val-file-info {
@@ -632,41 +639,6 @@ tr:hover {
   font-weight: 600;
 }
 
-/* History Drawer & Floating Trigger */
-.history-section {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  padding: 1.25rem;
-  box-shadow: var(--shadow-sm);
-}
-
-.history-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 0.85rem;
-  margin-top: 0.85rem;
-}
-
-.history-card {
-  padding: 0.85rem;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.history-card:hover {
-  border-color: var(--primary);
-  background: #ffffff;
-  transform: translateY(-1px);
-}
-
-.history-card.active {
-  border-color: var(--primary);
-  background: var(--primary-light);
-}
 
 /* Modal Popup for GeoJSON properties */
 .modal-overlay {

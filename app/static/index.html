@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Geospatial File Measurement Studio</title>
-  <meta name="description" content="Production-grade geospatial vector measurement, CRS projection, and feature analytics platform.">
+  <meta name="description" content="Geospatial vector measurement, CRS projection, and feature analytics.">
   
   <!-- Modern Typography (Plus Jakarta Sans) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,18 +14,18 @@
   <!-- Leaflet Map CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   
-  <!-- Custom Light Theme Styles -->
-  <link rel="stylesheet" href="/static/css/styles.css">
+  <!-- Light Theme Styles -->
+  <link rel="stylesheet" href="/static/css/styles.css?v=20261011">
 </head>
 <body>
 
-  <!-- Top Navigation & Brand Header -->
+  <!-- Header -->
   <header class="app-header">
     <div class="header-container">
       <div class="brand-wrapper">
         <div class="brand-icon">📐</div>
         <div>
-          <h1 class="brand-title">Geospatial File Measurement Studio</h1>
+          <h1 class="brand-title">Geospatial Measurement Studio</h1>
           <p class="brand-subtitle">Automated CRS Detection • Dynamic Metric UTM Projection • Vector Analytics</p>
         </div>
       </div>
@@ -40,15 +40,15 @@
     </div>
   </header>
 
-  <!-- Main Application Container -->
+  <!-- Main Container -->
   <main class="main-container">
 
-    <!-- 1. Upload & Client-Side Pre-Validation Card -->
+    <!-- 1. File Upload Card -->
     <section class="upload-card">
       <div class="card-header">
         <div class="card-title">
           <span>📤</span>
-          <span>Geospatial File Ingestion & Format Verification</span>
+          <span>Upload Geospatial File</span>
         </div>
         <div class="sample-buttons">
           <button class="btn btn-secondary btn-xs" onclick="loadSampleKml()">⚡ Try Sample KML</button>
@@ -59,12 +59,12 @@
       <!-- Drag & Drop Zone -->
       <div class="dropzone" id="dropzone">
         <div class="dropzone-icon">📁</div>
-        <div class="dropzone-text">Drag & drop your geospatial file here, or click to browse</div>
+        <div class="dropzone-text">Drag & drop your file here, or click to browse</div>
         <div class="dropzone-hint">Accepted formats: <strong>Shapefile package (.zip)</strong> or <strong>OGC KML (.kml)</strong> (Max 50MB)</div>
         <input type="file" id="fileInput" accept=".zip,.kml">
       </div>
 
-      <!-- Real-Time Format Pre-Validation Inspector Panel -->
+      <!-- File Pre-Validation & Process Action Panel -->
       <div class="validation-panel" id="validationPanel">
         <div class="val-row">
           <div class="val-file-info">
@@ -74,15 +74,14 @@
               <div class="val-meta" id="valMeta">Size: 0 KB</div>
             </div>
           </div>
-          <span class="val-badge" id="valBadge">Format Verified</span>
+          <div class="val-actions">
+            <span class="val-badge" id="valBadge">Format Verified</span>
+            <button class="btn btn-primary" id="btnUpload" disabled>
+              <span>⚡ Process & Calculate Measurements</span>
+            </button>
+          </div>
         </div>
         <div class="val-message" id="valMessage"></div>
-      </div>
-
-      <div style="margin-top: 1.25rem; display: flex; justify-content: flex-end;">
-        <button class="btn btn-primary" id="btnUpload" disabled>
-          <span>⚡ Process & Calculate Measurements</span>
-        </button>
       </div>
     </section>
 
@@ -141,7 +140,7 @@
             <span>🗺️</span>
             <span>Spatial Map View</span>
           </div>
-          <span style="font-size: 0.75rem; color: var(--text-muted);">CartoDB Positron Light Tiles</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Clean Basemap (No watermark)</span>
         </div>
         <div id="map"></div>
         <div class="map-legend">
@@ -195,17 +194,6 @@
 
     </section>
 
-    <!-- 4. Recent Uploads History Section -->
-    <section class="history-section">
-      <div class="card-title">
-        <span>🕒</span>
-        <span>Recent Processed Files</span>
-      </div>
-      <div class="history-list" id="recentFilesList">
-        <div style="font-size: 0.85rem; color: var(--text-muted);">Loading recent files...</div>
-      </div>
-    </section>
-
   </main>
 
   <!-- Properties Inspector Modal -->
@@ -225,7 +213,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   
   <!-- Interactive App Script -->
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/app.js?v=20261011"></script>
 
 </body>
 </html>

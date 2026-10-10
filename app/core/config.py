@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Geospatial Settings
     DEFAULT_PROJECTED_CRS_FALLBACK: str = "EPSG:3857"
 
+    # CARTO API Configuration
+    CARTO_API_BASE_URL: str = "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_4gio_1_b3622978f91cd3c126c8995e"
+    CARTO_API_KEY: str = "cb1_4gio_1_b3622978f91cd3c126c8995e"
+
     @property
     def max_upload_size_bytes(self) -> int:
         return self.MAX_UPLOAD_SIZE_MB * 1024 * 1024

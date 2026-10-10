@@ -17,11 +17,13 @@ document.addEventListener('DOMContentLoaded', () => {
     initUploadListeners();
     initTableFilters();
     checkApiHealth();
-    loadRecentFiles();
 });
 
+// CARTO API Configuration
+const CARTO_API_KEY = 'cb1_4gio_1_b3622978f91cd3c126c8995e';
+
 /* ==========================================================================
-   1. Map Initialization (Leaflet with CartoDB Positron Light Tiles)
+   1. Map Initialization (CARTO Basemaps + Multi-Layer Support)
    ========================================================================== */
 function initMap() {
     currentMap = L.map('map', {
@@ -29,11 +31,35 @@ function initMap() {
         attributionControl: true
     }).setView([20, 0], 2);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    // CARTO Voyager (Clean, colorful, licensed with your API key)
+    const cartoVoyager = L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${CARTO_API_KEY}`, {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
         maxZoom: 20
-    }).addTo(currentMap);
+    });
+
+    // CARTO Positron Light (Minimalist light theme with your API key)
+    const cartoPositron = L.tileLayer(`https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${CARTO_API_KEY}`, {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20
+    });
+
+    // OpenStreetMap
+    const osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19
+    });
+
+    // Activate CARTO Voyager by default
+    cartoVoyager.addTo(currentMap);
+
+    // Add layer switch control to top right of map
+    L.control.layers({
+        'CARTO Voyager': cartoVoyager,
+        'CARTO Positron': cartoPositron,
+        'OpenStreetMap': osmLayer
+    }, null, { position: 'topright' }).addTo(currentMap);
 }
 
 /* ==========================================================================
@@ -199,8 +225,6 @@ async function uploadAndProcessFile(file) {
 
         // Fetch detailed measurements: GET /api/files/{id}/measurements/
         await loadMeasurementsForFile(fileId);
-        loadRecentFiles();
-
     } catch (err) {
         console.error('Upload error:', err);
         alert('An unexpected network error occurred while uploading.');
@@ -559,6 +583,7 @@ async function loadSampleKml() {
         const blob = new Blob([kmlText], { type: 'application/vnd.google-earth.kml+xml' });
         const file = new File([blob], 'bengaluru_parks.kml', { type: 'application/vnd.google-earth.kml+xml' });
         handleSelectedFile(file);
+        uploadAndProcessFile(file);
     } catch (err) {
         console.error('Failed to load sample KML:', err);
     }
@@ -566,23 +591,22 @@ async function loadSampleKml() {
 
 async function loadSampleShapefile() {
     try {
-        // Fetch pre-generated sample from data directory if server exposes it, or notify
         const res = await fetch('/data/sample_data/berlin_parcels.zip');
         if (res.ok) {
             const blob = await res.blob();
             const file = new File([blob], 'berlin_parcels.zip', { type: 'application/zip' });
             handleSelectedFile(file);
+            uploadAndProcessFile(file);
             return;
         }
     } catch (e) {
         // Fallback
     }
-    // Alternatively prompt user to pick from data/sample_data/
     document.getElementById('fileInput').click();
 }
 
 /* ==========================================================================
-   8. Health Check & Recent Files History
+   8. Service Health Check
    ========================================================================== */
 async function checkApiHealth() {
     try {
@@ -596,38 +620,3 @@ async function checkApiHealth() {
     }
 }
 
-async function loadRecentFiles() {
-    try {
-        const res = await fetch('/api/files/?limit=6');
-        if (!res.ok) return;
-
-        const data = await res.json();
-        const container = document.getElementById('recentFilesList');
-        container.innerHTML = '';
-
-        if (!data.items || data.items.length === 0) {
-            container.innerHTML = `<div style="font-size: 0.85rem; color: var(--text-muted); grid-column: 1/-1;">No files uploaded yet. Upload a file above to begin.</div>`;
-            return;
-        }
-
-        data.items.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'history-card';
-            div.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
-                    <strong style="font-size: 0.85rem; color: var(--text-main);">${item.filename}</strong>
-                    <span class="badge ${item.status === 'COMPLETED' ? 'badge-completed' : 'badge-unsupported'}">${item.status}</span>
-                </div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">
-                    ${item.feature_count} features • ${item.file_type} • ${item.source_crs || 'EPSG:4326'}
-                </div>
-            `;
-            div.addEventListener('click', () => {
-                loadMeasurementsForFile(item.id);
-            });
-            container.appendChild(div);
-        });
-    } catch (err) {
-        console.warn('Could not load recent files:', err);
-    }
-}

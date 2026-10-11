@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: geospatial-measurement-api
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: DATABASE_URL
+        value: sqlite:///./data/geospatial.db
+      - key: UPLOAD_DIR
+        value: ./data/uploads
+      - key: TEMP_DIR
+        value: ./data/temp
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "50"
+      - key: DEFAULT_PROJECTED_CRS_FALLBACK
+        value: "EPSG:3857"
+      - key: CARTO_API_BASE_URL
+        value: "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_4gio_1_b3622978f91cd3c126c8995e"
+      - key: CARTO_API_KEY
+        value: "cb1_4gio_1_b3622978f91cd3c126c8995e"

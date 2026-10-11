@@ -1,373 +1,178 @@
 # Geospatial File Measurement API
 
-A production-grade, modular backend REST API built with **FastAPI**, **GeoPandas**, **Shapely**, **PyProj**, and **SQLAlchemy 2.x** that accepts geospatial files (**ESRI Shapefile ZIP archives** and **KML files**), validates and extracts geographic features, detects Coordinate Reference Systems (CRS), transforms geographic coordinates into optimal metric projected coordinate systems, and calculates precise geometric measurements (**Polygon area** in square meters and **LineString length** in meters).
+A production-grade, modular backend REST API built with **FastAPI**, **GeoPandas**, **Shapely**, **PyProj**, and **SQLAlchemy 2.x**. It accepts geospatial files (**ESRI Shapefile ZIP archives** and **KML files**), validates geometries, detects Coordinate Reference Systems (CRS), transforms coordinates into optimal metric projected coordinate systems (UTM), and calculates planar measurements (**Polygon area** in $m^2$ and **LineString length** in meters).
+
+---
+
+## 🌐 Live Deployed Application
+
+> **Production Base URL**: [https://geospatial-measurement-api-mvz4.onrender.com](https://geospatial-measurement-api-mvz4.onrender.com)
+
+### Quick Links to Live Services & Endpoints
+
+| Resource | Live Link | Method | Description |
+| :--- | :--- | :---: | :--- |
+| **Interactive Web UI** | [Live Studio UI](https://geospatial-measurement-api-mvz4.onrender.com/ui) | `GET` | Web interface with Leaflet map, file dropzone, and measurement tables |
+| **Swagger UI Docs** | [Live Swagger Docs](https://geospatial-measurement-api-mvz4.onrender.com/docs) | `GET` | Interactive OpenAPI documentation & API test console |
+| **ReDoc Documentation** | [Live ReDoc](https://geospatial-measurement-api-mvz4.onrender.com/redoc) | `GET` | Comprehensive API specifications and schemas |
+| **Health Check** | [Live Health Endpoint](https://geospatial-measurement-api-mvz4.onrender.com/api/health) | `GET` | Service status and database connectivity check |
+| **List Files** | [Live List Files](https://geospatial-measurement-api-mvz4.onrender.com/api/files/?skip=0&limit=50) | `GET` | Paginated list of uploaded geospatial files |
+| **Upload File** | `https://geospatial-measurement-api-mvz4.onrender.com/api/files/` | `POST` | Multipart upload for Shapefile (`.zip`) or KML (`.kml`) |
+| **File Metadata** | `https://geospatial-measurement-api-mvz4.onrender.com/api/files/{id}/` | `GET` | Detailed metadata and processing status by file ID |
+| **File Measurements** | `https://geospatial-measurement-api-mvz4.onrender.com/api/files/{id}/measurements/` | `GET` | Computed metric measurements and feature properties |
 
 ---
 
 ## Table of Contents
 
-1. [Project Overview](#1-project-overview)
-2. [Key Features](#2-key-features)
-3. [Architecture & Workflow](#3-architecture--workflow)
-   - [Project Directory Structure](#project-directory-structure)
-   - [File Processing Pipeline](#file-processing-pipeline)
-   - [Measurement Calculation Pipeline](#measurement-calculation-pipeline)
+1. [Architecture](#architecture)
+   - [Application Structure](#application-structure)
+   - [File-Processing Flow](#file-processing-flow)
+   - [Measurement Calculation Flow](#measurement-calculation-flow)
    - [CRS Handling & Projection Strategy](#crs-handling--projection-strategy)
-4. [Technology Stack](#4-technology-stack)
-5. [Setup & Installation](#5-setup--installation)
-   - [Prerequisites](#prerequisites)
-   - [Local Environment Setup](#local-environment-setup)
-   - [Database Migrations](#database-migrations)
-   - [Running the Server](#running-the-server)
-   - [Running with Docker](#running-with-docker)
-6. [API Documentation](#6-api-documentation)
-   - [Interactive OpenAPI Docs](#interactive-openapi-docs)
+2. [API Documentation](#api-documentation)
    - [Endpoints Specification](#endpoints-specification)
    - [Standard Error Envelope](#standard-error-envelope)
-7. [Testing & Verification](#7-testing--verification)
-8. [Design Decisions & Alternatives](#8-design-decisions--alternatives)
-9. [Key Learnings](#9-key-learnings)
-10. [Future Scope](#10-future-scope)
-11. [Git Submission Instructions](#11-git-submission-instructions)
+3. [Setup & Local Development](#setup--local-development)
+   - [Prerequisites](#prerequisites)
+   - [Local Environment Setup](#local-environment-setup)
+   - [Running with Docker](#running-with-docker)
+   - [Running Tests](#running-tests)
+4. [Design Decisions & Alternatives](#design-decisions--alternatives)
+5. [Key Learnings](#key-learnings)
+6. [Future Scope](#future-scope)
 
 ---
 
-## 1. Project Overview
+## Architecture
 
-Geospatial data formats such as ESRI Shapefiles and Keyhole Markup Language (KML) are industry standards for exchanging geospatial vectors. However, files frequently use geographic coordinate systems (such as **WGS 84 / EPSG:4326**), where coordinates are expressed in angular degrees of latitude and longitude.
+### Application Structure
 
-Calculating geometric area or length directly on angular degree coordinates produces physically meaningless units (e.g., "square degrees") and severely inaccurate values due to meridional convergence towards the poles.
-
-The **Geospatial File Measurement API** solves this by providing an automated, resilient, and secure service that:
-- Ingests and validates geospatial file formats (`.zip` Shapefiles and `.kml`).
-- Protects against security vectors (Zip-Slip traversal, memory exhaustion, malformed XML).
-- Inspects features, attributes, and geometries.
-- Detects the coordinate reference system (CRS).
-- Automatically determines and reprojects features to the optimal local metric projected coordinate system (e.g., local Universal Transverse Mercator [UTM] zone).
-- Computes planar measurements in standard metric units: **Polygon area in square meters ($m^2$)** and **LineString length in meters ($m$)**.
-- Persists all metadata and measurement results cleanly in a relational database.
-
----
-
-## 2. Key Features
-
-- **Multi-Format Ingestion**:
-  - **ESRI Shapefile ZIP archives**: Validates required companion files (`.shp`, `.shx`, `.dbf`, `.prj`), detects ambiguous multiple shapefiles, and prevents archive traversal attacks.
-  - **KML Files**: Safely parses OGC KML 2.2 XML with Placemark geometries (Polygon, LineString, Point) and ExtendedData properties.
-- **Robust Coordinate Reference System (CRS) Engine**:
-  - Automatically identifies source CRS.
-  - Detects whether source CRS is geographic (e.g., EPSG:4326) or projected.
-  - **Dynamic UTM Zone Selection**: Computes dataset centroid coordinates and dynamically selects the corresponding Universal Transverse Mercator (UTM) EPSG projection (e.g., EPSG:32633 for Berlin, EPSG:32643 for Bengaluru, EPSG:32756 for Sydney) with fallback polar stereographic handling (UPS North/South).
-- **Graceful Unsupported Geometry Handling**:
-  - Polygons / MultiPolygons $\rightarrow$ Area ($m^2$, `COMPLETED`).
-  - LineStrings / MultiLineStrings $\rightarrow$ Length ($m$, `COMPLETED`).
-  - Points / MultiPoints $\rightarrow$ `NOT_REQUIRED` (value: `null`).
-  - Geometry collections, empty geometries $\rightarrow$ `NOT_SUPPORTED` (graceful, no crash).
-- **Enterprise-Grade Architecture**:
-  - **Modular separation of concerns**: API Routers $\rightarrow$ Services $\rightarrow$ Repositories $\rightarrow$ SQLAlchemy 2.0 ORM $\rightarrow$ Database.
-  - **Strict typing**: Pydantic v2 schemas for all requests and responses.
-  - **Standardized error envelope**: `{"error": {"code": "...", "message": "...", "details": ...}}`.
-  - **Full test coverage**: 39 automated unit and integration tests passing in under 1 second.
-
----
-
-## 3. Architecture & Workflow
-
-### Project Directory Structure
+The application follows clean architectural principles with strict separation between routing, business logic, data persistence, and schemas:
 
 ```text
-geospatial-measurement-api/
-│
+geospatial-file-measurement-api/
 ├── app/
-│   ├── main.py                  # FastAPI application entrypoint, middleware & exception handlers
-│   │
-│   ├── api/                     # REST API Layer
+│   ├── main.py                  # FastAPI initialization, middleware, routes, and exception handlers
+│   ├── api/
 │   │   ├── dependencies.py      # Database session dependency injection
 │   │   └── routes/
-│   │       ├── files.py         # POST /api/files/, GET /api/files/, GET /api/files/{id}/
-│   │       ├── measurements.py  # GET /api/files/{id}/measurements/
-│   │       └── health.py        # GET /api/health
-│   │
-│   ├── core/                    # Core System Configurations
-│   │   ├── config.py            # Pydantic Settings v2 configuration
-│   │   ├── logging.py           # Structured application logger
-│   │   └── exceptions.py        # Domain-specific application exceptions
-│   │
-│   ├── db/                      # Database Infrastructure
-│   │   └── session.py           # SQLAlchemy 2.0 engine, SessionLocal & init_db
-│   │
-│   ├── models/                  # SQLAlchemy 2.0 Declarative ORM Models
-│   │   ├── base.py              # DeclarativeBase & TimestampMixin
-│   │   ├── file.py              # FileModel (files table)
-│   │   ├── feature.py           # FeatureModel (features table)
-│   │   └── measurement.py       # MeasurementModel (measurements table)
-│   │
-│   ├── schemas/                 # Pydantic v2 Validation & Response Schemas
-│   │   ├── common.py            # Status enums & standardized ErrorResponse
-│   │   ├── file.py              # FileUploadResponse & FileInfoResponse
-│   │   ├── feature.py           # FeatureResponse
-│   │   └── measurement.py       # FileMeasurementsResponse & FeatureMeasurementItem
-│   │
-│   ├── services/                # Business & Geospatial Logic Layer
-│   │   ├── file_service.py      # Upload orchestration & processing lifecycle
-│   │   ├── geospatial_service.py# Shapefile & KML feature extraction
-│   │   ├── crs_service.py       # CRS detection, UTM zone calculation & reprojection
-│   │   └── measurement_service.py# Polygon area & LineString length computation
-│   │
-│   ├── repositories/            # Data Access Layer (Persistence CRUD)
-│   │   ├── file_repository.py
-│   │   ├── feature_repository.py
-│   │   └── measurement_repository.py
-│   │
-│   ├── static/                  # Interactive Light-Theme Web UI
-│   │   ├── index.html           # Main studio single-page interface
-│   │   ├── css/styles.css       # Clean light-theme design system styles
-│   │   └── js/app.js            # Client-side pre-validation, Leaflet map & analytics
-│   │
-│   └── utils/                   # Utilities & Validation
-│       ├── file_validation.py   # Extension check, Zip-Slip prevention, Shapefile verification
-│       └── geometry_utils.py    # GeoJSON serialization & property sanitization
-│
-├── data/                        # Local Storage (ignored in git)
-│   ├── sample_data/             # Pre-built test datasets (bengaluru_parks.kml, berlin_parcels.zip)
-│   ├── uploads/                 # Uploaded files storage
-│   └── temp/                    # Temporary extracted files (auto-cleaned)
-│
-├── migrations/                  # Alembic database schema migrations
-│   ├── env.py
-│   └── versions/
-│
-├── scripts/                     # Operational & Verification Scripts
-│   ├── generate_sample_data.py  # Generates test KML & Shapefile archives
-│   └── verify_api_live.py       # End-to-end integration test runner
-│
-├── tests/                       # Automated Test Suite (pytest)
-│   ├── conftest.py              # Shared fixtures & in-memory test database
-│   ├── test_api.py              # REST API endpoint tests
-│   ├── test_crs.py              # CRS detection & UTM reprojection tests
-│   ├── test_measurements.py     # Polygon, LineString, Point measurement tests
-│   ├── test_upload.py           # File upload & bad file handling tests
-│   └── test_validation.py       # Zip-Slip, extension, and companion component tests
-│
-├── .env.example                 # Environment configuration template
-├── .gitignore                   # Git ignore patterns
-├── alembic.ini                  # Alembic database configuration
-├── Dockerfile                   # Production container definition
-├── docker-compose.yml           # Multi-container local execution specification
-├── pyproject.toml               # Project metadata, pytest & ruff configurations
-├── requirements.txt             # Locked dependencies
-└── README.md                    # Project documentation
+│   │       ├── files.py         # File upload and listing endpoints
+│   │       ├── measurements.py  # Geometric measurement query endpoints
+│   │       └── health.py        # System health and database verification
+│   ├── core/
+│   │   ├── config.py            # Pydantic Settings v2 environment configurations
+│   │   ├── exceptions.py        # Domain-specific exception definitions
+│   │   └── logging.py           # Structured application logging
+│   ├── db/
+│   │   └── session.py           # SQLAlchemy 2.0 database engine & session maker
+│   ├── models/                  # SQLAlchemy ORM declarative models (Files, Features, Measurements)
+│   ├── repositories/            # Database query encapsulation (FileRepository, MeasurementRepository)
+│   ├── schemas/                 # Pydantic v2 request & response validation schemas
+│   ├── services/                # Domain logic (FileService, GeospatialService, CRSService, MeasurementService)
+│   ├── static/                  # Web Studio UI (HTML5, Vanilla CSS, Leaflet JS)
+│   └── utils/                   # File security validation, Zip-Slip prevention, XML guards
+├── data/
+│   ├── sample_data/             # Test geospatial datasets (.kml, .zip)
+│   ├── uploads/                 # Upload directory (isolated UUID subdirectories)
+│   └── temp/                    # Temporary extraction directory (auto-cleaned)
+├── tests/                       # Automated pytest suite (40 unit & integration tests)
+├── Dockerfile                   # Container definition (dynamic $PORT support for Render)
+├── docker-compose.yml           # Multi-container local orchestration
+├── render.yaml                  # Render Infrastructure-as-Code deployment blueprint
+└── requirements.txt             # Locked project dependencies
 ```
 
 ---
 
-### File Processing Pipeline
+### File-Processing Flow
 
 ```mermaid
 flowchart TD
-    Client([Client HTTP Request]) -->|POST /api/files/| Router[FastAPI Router]
-    Router --> FileValidation[File Validation: Extension, Size & MIME]
-    FileValidation --> Storage[Stream to Safe File Storage]
+    Client([Client Request]) -->|POST /api/files/| Route[FastAPI Route]
+    Route --> Val[Pre-Flight Validation: Extension & Size Limits]
+    Val --> SafeSave[Save Stream to Sandboxed UUID Directory]
     
-    Storage --> FormatBranch{File Extension?}
+    SafeSave --> ExtBranch{File Format?}
     
-    FormatBranch -->|.zip| ZipSafe[Zip-Slip Traversal Check & Safe Extraction]
-    ZipSafe --> ShpValidation[Check .shp, .shx, .dbf, .prj Integrity]
-    ShpValidation --> GeoReader[Geospatial Service: Read Shapefile]
+    ExtBranch -->|.zip| ZipSafe[Zip-Slip Check: Validate Archive Entries]
+    ZipSafe --> ShpExtract[Extract Companion Components .shp, .shx, .dbf, .prj]
+    ShpExtract --> ReadGeo[Read Layer via GeoPandas / PyOGRIO]
     
-    FormatBranch -->|.kml| KMLVal[XML Root & Structure Validation]
-    KMLVal --> KMLReader[Geospatial Service: Parse KML Placemarks]
+    ExtBranch -->|.kml| KMLVal[Validate XML Root & Guard against Malformed Data]
+    KMLVal --> ReadKML[Parse KML Placemarks via FastKML & ElementTree]
     
-    GeoReader --> FeatureExtraction[Extract Features, Geometries & Properties]
-    KMLReader --> FeatureExtraction
+    ReadGeo --> FeatNorm[Normalize Features, Geometries & Properties]
+    ReadKML --> FeatNorm
     
-    FeatureExtraction --> CRSDetect[CRS Service: Detect Source CRS & Compute Extent Bounds]
-    CRSDetect --> CalcUTM[Determine Optimal Projected Metric CRS: UTM Zone from Centroid]
-    
-    CalcUTM --> FeatureLoop[Iterate Features]
-    
-    FeatureLoop --> Reproject[Transform Geometry to Projected Metric CRS]
-    Reproject --> Measure[Measurement Service: Calculate Area / Length / Null]
-    
-    Measure --> Persist[Database Persistence: File, Features & Measurements]
-    Persist --> Response([Return 201 Created FileUploadResponse])
+    FeatNorm --> CRSStep[CRS Service: Detect Source CRS & Compute Extent Bounds]
+    CRSStep --> Reproject[Reproject Features to Optimal Metric UTM Zone]
+    Reproject --> Measure[Calculate Planar Measurements: Area / Length / Null]
+    Measure --> Persist[Persist File, Features & Measurements in Relational DB]
+    Persist --> Resp([Return 201 Created FileUploadResponse])
 ```
 
 ---
 
-### Measurement Calculation Pipeline
+### Measurement Calculation Flow
+
+Calculations are performed strictly on **projected 2D Cartesian coordinates** to guarantee physically meaningful metric units:
 
 ```mermaid
 flowchart TD
-    Feature[Input Feature] --> CheckGeom{Geometry Type?}
+    Feature[Input Feature Geometry] --> CheckType{Geometry Type?}
     
-    CheckGeom -->|Polygon / MultiPolygon| PolyProj[Project to Metric CRS]
-    PolyProj --> CalcArea[Compute Area: geom.area]
-    CalcArea --> ResultArea["measurement_type: 'area'<br/>unit: 'square_meters'<br/>status: 'COMPLETED'"]
+    CheckType -->|Polygon / MultiPolygon| Poly[Project to Local Metric UTM]
+    Poly --> Area[Compute Planar Area: geom.area]
+    Area --> ResArea["measurement_type: 'area'<br/>unit: 'square_meters'<br/>status: 'COMPLETED'"]
     
-    CheckGeom -->|LineString / MultiLineString| LineProj[Project to Metric CRS]
-    LineProj --> CalcLength[Compute Length: geom.length]
-    CalcLength --> ResultLen["measurement_type: 'length'<br/>unit: 'meters'<br/>status: 'COMPLETED'"]
+    CheckType -->|LineString / MultiLineString| Line[Project to Local Metric UTM]
+    Line --> Len[Compute Planar Length: geom.length]
+    Len --> ResLen["measurement_type: 'length'<br/>unit: 'meters'<br/>status: 'COMPLETED'"]
     
-    CheckGeom -->|Point / MultiPoint| PtPass["measurement_type: null<br/>unit: null<br/>status: 'NOT_REQUIRED'"]
+    CheckType -->|Point / MultiPoint| Pt[Point Feature]
+    Pt --> ResPt["measurement_type: null<br/>unit: null<br/>status: 'NOT_REQUIRED'"]
     
-    CheckGeom -->|GeometryCollection / Empty / Unknown| Unsup["measurement_type: null<br/>unit: null<br/>status: 'NOT_SUPPORTED'"]
+    CheckType -->|GeometryCollection / Empty| Unsup[Invalid or Empty Feature]
+    Unsup --> ResUnsup["measurement_type: null<br/>unit: null<br/>status: 'NOT_SUPPORTED'"]
 ```
 
 ---
 
 ### CRS Handling & Projection Strategy
 
-#### The Problem with Angular Coordinates
-Coordinates in geographic reference systems like `EPSG:4326` (WGS 84) represent points on an ellipsoidal Earth surface using degrees:
-- Longitudinal degree length varies from $\approx 111.32\text{ km}$ at the equator down to $0\text{ km}$ at the poles:
-  $$\Delta x = \Delta\lambda \cdot \cos(\phi) \cdot 111,320\text{ meters}$$
-- Directly computing `geom.area` on a polygon in degrees produces units of **$\text{degrees}^2$** (microscopic numbers such as $0.0003$). This is physically invalid and non-standard.
-
-#### The Metric Projection Strategy
-To calculate accurate planar area and distance, the coordinates must be reprojected to a Cartesian coordinate system with linear units in **meters**:
-1. **Source Inspection**: The application inspects `gdf.crs`. If the data is already projected in metric units (e.g. state plane or national grid), it is retained.
-2. **Centroid & Bounds Computation**: If the source is geographic (or missing), the bounding box $[min\_lon, min\_lat, max\_lon, max\_lat]$ is computed, determining the center:
-   $$\text{center\_lon} = \frac{min\_lon + max\_lon}{2}, \quad \text{center\_lat} = \frac{min\_lat + max\_lat}{2}$$
-3. **Universal Transverse Mercator (UTM) Zone Selection**:
-   The globe is partitioned into 60 longitudinal UTM zones of $6^\circ$ width each:
-   $$\text{Zone} = \left\lfloor \frac{\text{center\_lon} + 180}{6} \right\rfloor + 1$$
-   The EPSG code is derived based on hemisphere:
-   - Northern Hemisphere ($\text{lat} \ge 0$): $\text{EPSG} = 32600 + \text{Zone}$
-   - Southern Hemisphere ($\text{lat} < 0$): $\text{EPSG} = 32700 + \text{Zone}$
-   - Extreme Polar Latitudes ($\text{lat} > 84^\circ\text{N}$ or $\text{lat} < -80^\circ\text{S}$): Automatically handled via Universal Polar Stereographic (UPS North: EPSG:32661 / UPS South: EPSG:32761).
-4. **Coordinate Transformation**:
-   High-performance transformation is executed via `pyproj.Transformer.from_crs(source_crs, target_crs, always_xy=True)` with `shapely.ops.transform`.
-5. **Accurate Planar Metric Output**:
-   Measurements are calculated on the projected geometry and rounded to 4 decimal places:
-   - **Polygon Area**: $\text{square\_meters}$ ($m^2$)
-   - **LineString Length**: $\text{meters}$ ($m$)
+1. **Why Coordinate Transformation is Mandatory**:
+   Geospatial datasets frequently use geographic coordinates such as **WGS 84 (`EPSG:4326`)**, where points are expressed in angular degrees ($^\circ$) of latitude and longitude. Calculating geometric area or distance directly on angular coordinates produces physically meaningless units (e.g., "square degrees") and large scale distortions.
+2. **Dynamic Centroid-Based UTM Selection**:
+   The `CRSService` calculates the dataset's geographic centroid $(\text{longitude}, \text{latitude})$ and dynamically derives the corresponding Universal Transverse Mercator (UTM) zone:
+   $$\text{Zone} = \left\lfloor \frac{\text{longitude} + 180}{6} \right\rfloor + 1$$
+   - Northern Hemisphere ($\text{lat} \ge 0$): $\text{EPSG:32600} + \text{Zone}$ (e.g., EPSG:32643 for Bengaluru, EPSG:32633 for Berlin).
+   - Southern Hemisphere ($\text{lat} < 0$): $\text{EPSG:32700} + \text{Zone}$ (e.g., EPSG:32756 for Sydney).
+   - Polar Regions ($|\text{lat}| > 84^\circ$): Automatically routed to Universal Polar Stereographic (UPS North `EPSG:32661` or UPS South `EPSG:32761`).
+3. **High-Performance Transformation**:
+   Coordinates are projected via `pyproj.Transformer.from_crs(source_crs, target_crs, always_xy=True)` integrated with `shapely.ops.transform`.
 
 ---
 
-## 4. Technology Stack
-
-| Layer | Technology | Rationale |
-| :--- | :--- | :--- |
-| **Framework** | **FastAPI 0.110+** | High-performance asynchronous REST API framework with native OpenAPI/Swagger generation and dependency injection. |
-| **ASGI Server** | **Uvicorn** | Fast, production-ready ASGI web server. |
-| **Validation & Settings** | **Pydantic v2 / Pydantic-Settings** | Fast C-based validation engine, structured data models, and typed environment settings. |
-| **Geospatial Processing** | **GeoPandas & Shapely 2.x** | Industry standard Python vector data libraries providing high-performance GEOS C-library wrappers. |
-| **CRS & Projections** | **PyProj (PROJ 9+)** | Authoritative cartographic projection and coordinate transformation engine. |
-| **I/O Drivers** | **PyOGRIO & Fiona** | High-performance C-backed GDAL drivers for reading ESRI Shapefile and OGC KML datasets. |
-| **KML Processing** | **FastKML & Python ElementTree** | Standard-compliant OGC KML 2.2 parsing with fallback resilience. |
-| **Database ORM** | **SQLAlchemy 2.0** | Modern declarative ORM (`Mapped`, `mapped_column`) with portable SQL schema design. |
-| **Migrations** | **Alembic** | Automated database schema versioning and migration management. |
-| **Testing** | **pytest & HTTPX** | Automated testing suite with in-memory SQLite fixtures and end-to-end integration testing. |
-| **Code Quality** | **Ruff** | Ultra-fast Python linter and formatter maintaining strict code standards. |
-
----
-
-## 5. Setup & Installation
-
-### Prerequisites
-
-- Python **3.10** or higher
-- Git
-
-### Local Environment Setup
-
-1. **Clone the repository**:
-   ```bash
-   git clone <repository_url>
-   cd "Geospatial File Measurement API"
-   ```
-
-2. **Create and activate a virtual environment**:
-   - **Linux / macOS**:
-     ```bash
-     python3 -m venv .venv
-     source .venv/bin/activate
-     ```
-   - **Windows (PowerShell)**:
-     ```powershell
-     python -m venv .venv
-     .venv\Scripts\Activate.ps1
-     ```
-
-3. **Install dependencies**:
-   ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
-
-4. **Configure environment variables**:
-   ```bash
-   cp .env.example .env
-   ```
-   *(Defaults in `.env.example` use local SQLite `data/geospatial.db` and default upload directories).*
-
-### Database Migrations
-
-Apply database schema migrations via Alembic:
-
-```bash
-alembic upgrade head
-```
-
-*(Note: The application also includes automatic table initialization on startup as a fallback).*
-
-### Running the Server
-
-Start the development server using Uvicorn:
-
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-The API will be available at:
-- **Base API**: [http://localhost:8000/](http://localhost:8000/)
-- **Interactive Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **ReDoc API Documentation**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
-
----
-
-### Running with Docker
-
-To build and run the application in a lightweight container:
-
-```bash
-docker compose up --build
-```
-
-To stop the container:
-```bash
-docker compose down
-```
-
----
-
-## 6. API Documentation
-
-### Interactive OpenAPI Docs
-Once the server is running, navigate to:
-- **Swagger UI**: `http://localhost:8000/docs`
-- **ReDoc**: `http://localhost:8000/redoc`
-
----
+## API Documentation
 
 ### Endpoints Specification
 
 #### 1. Upload & Process Geospatial File
 - **Method**: `POST`
 - **Path**: `/api/files/`
-- **Description**: Uploads a `.zip` Shapefile archive or `.kml` file. The server validates the file, extracts features, calculates measurements, reprojects to an optimal metric UTM CRS, and persists results.
-- **Request**: `multipart/form-data` with parameter `file`.
+- **Live URL**: `https://geospatial-measurement-api-mvz4.onrender.com/api/files/`
+- **Payload**: `multipart/form-data` with parameter `file` (`.zip` Shapefile or `.kml`).
 
-**cURL Example**:
+**Example Request**:
 ```bash
-curl -X POST "http://localhost:8000/api/files/" \
+curl -X POST "https://geospatial-measurement-api-mvz4.onrender.com/api/files/" \
   -H "accept: application/json" \
   -H "Content-Type: multipart/form-data" \
-  -F "file=@data/sample_data/bengaluru_parks.kml"
+  -F "file=@bengaluru_parks.kml"
 ```
 
-**Response (`201 Created`)**:
+**Example Response (`201 Created`)**:
 ```json
 {
   "id": "d93b39ae-f17b-4225-9299-d54e7990c31d",
@@ -379,8 +184,8 @@ curl -X POST "http://localhost:8000/api/files/" \
   "source_crs": "EPSG:4326",
   "measurement_crs": "EPSG:32643",
   "status": "COMPLETED",
-  "uploaded_at": "2026-10-07T18:38:30.253300Z",
-  "processed_at": "2026-10-07T18:38:30.389321Z"
+  "uploaded_at": "2026-10-11T12:00:00.000000Z",
+  "processed_at": "2026-10-11T12:00:00.120000Z"
 }
 ```
 
@@ -389,15 +194,15 @@ curl -X POST "http://localhost:8000/api/files/" \
 #### 2. Get File Information
 - **Method**: `GET`
 - **Path**: `/api/files/{id}/`
-- **Description**: Retrieves metadata and processing status for an uploaded file.
+- **Live URL Format**: `https://geospatial-measurement-api-mvz4.onrender.com/api/files/{id}/`
 
-**cURL Example**:
+**Example Request**:
 ```bash
-curl -X GET "http://localhost:8000/api/files/d93b39ae-f17b-4225-9299-d54e7990c31d/" \
+curl -X GET "https://geospatial-measurement-api-mvz4.onrender.com/api/files/d93b39ae-f17b-4225-9299-d54e7990c31d/" \
   -H "accept: application/json"
 ```
 
-**Response (`200 OK`)**:
+**Example Response (`200 OK`)**:
 ```json
 {
   "id": "d93b39ae-f17b-4225-9299-d54e7990c31d",
@@ -409,8 +214,8 @@ curl -X GET "http://localhost:8000/api/files/d93b39ae-f17b-4225-9299-d54e7990c31
   "source_crs": "EPSG:4326",
   "measurement_crs": "EPSG:32643",
   "status": "COMPLETED",
-  "uploaded_at": "2026-10-07T18:38:30.253300Z",
-  "processed_at": "2026-10-07T18:38:30.389321Z",
+  "uploaded_at": "2026-10-11T12:00:00.000000Z",
+  "processed_at": "2026-10-11T12:00:00.120000Z",
   "error_message": null
 }
 ```
@@ -420,15 +225,15 @@ curl -X GET "http://localhost:8000/api/files/d93b39ae-f17b-4225-9299-d54e7990c31
 #### 3. Get File Measurements
 - **Method**: `GET`
 - **Path**: `/api/files/{id}/measurements/`
-- **Description**: Returns calculated measurements (area, length) for all features in the specified file, preserving feature properties and indicating measurement units.
+- **Live URL Format**: `https://geospatial-measurement-api-mvz4.onrender.com/api/files/{id}/measurements/`
 
-**cURL Example**:
+**Example Request**:
 ```bash
-curl -X GET "http://localhost:8000/api/files/d93b39ae-f17b-4225-9299-d54e7990c31d/measurements/" \
+curl -X GET "https://geospatial-measurement-api-mvz4.onrender.com/api/files/d93b39ae-f17b-4225-9299-d54e7990c31d/measurements/" \
   -H "accept: application/json"
 ```
 
-**Response (`200 OK`)**:
+**Example Response (`200 OK`)**:
 ```json
 {
   "file_id": "d93b39ae-f17b-4225-9299-d54e7990c31d",
@@ -457,8 +262,7 @@ curl -X GET "http://localhost:8000/api/files/d93b39ae-f17b-4225-9299-d54e7990c31
       "unit": "meters",
       "status": "COMPLETED",
       "properties": {
-        "Name": "Kasturba Road Walkway",
-        "description": "Footpath boundary"
+        "Name": "Kasturba Road Walkway"
       }
     },
     {
@@ -469,8 +273,7 @@ curl -X GET "http://localhost:8000/api/files/d93b39ae-f17b-4225-9299-d54e7990c31
       "unit": null,
       "status": "NOT_REQUIRED",
       "properties": {
-        "Name": "Bandstand Landmark",
-        "description": "Historic bandstand point"
+        "Name": "Bandstand Landmark"
       }
     }
   ]
@@ -479,35 +282,50 @@ curl -X GET "http://localhost:8000/api/files/d93b39ae-f17b-4225-9299-d54e7990c31
 
 ---
 
-#### 4. List Uploaded Files
+#### 4. List Files (Paginated)
 - **Method**: `GET`
 - **Path**: `/api/files/?skip=0&limit=50`
-- **Description**: Returns a paginated list of all uploaded geospatial files.
+- **Live URL**: [https://geospatial-measurement-api-mvz4.onrender.com/api/files/?skip=0&limit=50](https://geospatial-measurement-api-mvz4.onrender.com/api/files/?skip=0&limit=50)
+
+**Example Response (`200 OK`)**:
+```json
+{
+  "total": 1,
+  "items": [
+    {
+      "id": "d93b39ae-f17b-4225-9299-d54e7990c31d",
+      "filename": "bengaluru_parks.kml",
+      "file_type": "KML",
+      "feature_count": 3,
+      "source_crs": "EPSG:4326",
+      "measurement_crs": "EPSG:32643",
+      "status": "COMPLETED"
+    }
+  ]
+}
+```
 
 ---
 
 #### 5. Health Check
 - **Method**: `GET`
 - **Path**: `/api/health`
-- **Description**: Returns API operational health and database connectivity state.
+- **Live URL**: [https://geospatial-measurement-api-mvz4.onrender.com/api/health](https://geospatial-measurement-api-mvz4.onrender.com/api/health)
 
----
-
-#### 6. Interactive Geospatial Measurement Studio (Web UI)
-- **Method**: `GET`
-- **Path**: `/ui` (or `/dashboard`)
-- **Description**: Serves the executive light-theme single-page dashboard featuring:
-  - Real-time drag-and-drop file upload with pre-flight format and size verification.
-  - Interactive Leaflet map visualizing extracted geometries.
-  - Metrics cards (total features, source CRS, UTM projection, total area, total length).
-  - Searchable, filterable measurements data table with zoom-to-feature actions.
-  - Recent uploads history drawer.
+**Example Response (`200 OK`)**:
+```json
+{
+  "status": "online",
+  "database": "healthy",
+  "version": "1.0.0"
+}
+```
 
 ---
 
 ### Standard Error Envelope
 
-All API errors return a standardized JSON structure with machine-readable codes and descriptive messages:
+All API errors return a uniform, machine-readable JSON envelope:
 
 ```json
 {
@@ -522,174 +340,124 @@ All API errors return a standardized JSON structure with machine-readable codes 
 }
 ```
 
-| HTTP Status | Error Code | Trigger Condition |
-| :--- | :--- | :--- |
+| HTTP Status | Error Code | Cause |
+| :---: | :--- | :--- |
 | `400 Bad Request` | `EMPTY_FILE` | Uploaded file size is 0 bytes. |
-| `400 Bad Request` | `UNSUPPORTED_FILE_TYPE` | File extension is not `.zip` or `.kml`. |
-| `400 Bad Request` | `CORRUPTED_ARCHIVE` | ZIP file is not a valid archive. |
-| `400 Bad Request` | `PATH_TRAVERSAL_DETECTED` | Archive contains Zip-Slip path traversal entries. |
-| `400 Bad Request` | `INVALID_SHAPEFILE` | Missing `.shp`, multiple `.shp`, or missing companion `.shx`/`.dbf`. |
-| `400 Bad Request` | `INVALID_KML` | Malformed XML or missing KML root element. |
-| `404 Not Found` | `NOT_FOUND` | Requested file UUID does not exist. |
-| `413 Payload Too Large` | `FILE_SIZE_EXCEEDED` | File size exceeds configured maximum (e.g., 50 MB). |
+| `400 Bad Request` | `UNSUPPORTED_FILE_TYPE` | Extension is not `.zip` or `.kml`. |
+| `400 Bad Request` | `CORRUPTED_ARCHIVE` | Invalid or unreadable ZIP archive. |
+| `400 Bad Request` | `PATH_TRAVERSAL_DETECTED` | Archive contains Zip-Slip relative paths. |
+| `400 Bad Request` | `INVALID_SHAPEFILE` | Missing `.shp`, multiple `.shp`, or missing `.shx`/`.dbf`. |
+| `400 Bad Request` | `INVALID_KML` | Malformed XML or missing KML root document. |
+| `404 Not Found` | `NOT_FOUND` | Specified file ID does not exist in the database. |
+| `413 Payload Too Large` | `FILE_SIZE_EXCEEDED` | File size exceeds configured maximum (50 MB). |
 | `422 Unprocessable` | `CRS_PROCESSING_ERROR` | Coordinate system transformation or unresolvable CRS. |
 | `422 Unprocessable` | `GEOSPATIAL_PROCESSING_ERROR` | Corrupted spatial geometries or feature parsing error. |
-| `500 Server Error` | `INTERNAL_SERVER_ERROR` | Unexpected server error (stack trace safely logged server-side). |
 
 ---
 
-## 7. Testing & Verification
+## Setup & Local Development
 
-The project includes **40 unit and integration tests** covering all critical requirements.
+### Prerequisites
+- Python **3.10+**
+- Git
 
-### Running Automated Tests
+### Local Environment Setup
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/surhendhaar07/geospatial-file-measurement-api.git
+   cd geospatial-file-measurement-api
+   ```
+
+2. **Create and activate a virtual environment**:
+   - **Linux / macOS**:
+     ```bash
+     python3 -m venv .venv
+     source .venv/bin/activate
+     ```
+   - **Windows (PowerShell)**:
+     ```powershell
+     python -m venv .venv
+     .\.venv\Scripts\Activate.ps1
+     ```
+
+3. **Install dependencies**:
+   ```bash
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
+
+4. **Environment configuration**:
+   ```bash
+   cp .env.example .env
+   ```
+
+5. **Run the development server**:
+   ```bash
+   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   ```
+
+Access the local services:
+- **Web UI**: [http://localhost:8000/ui](http://localhost:8000/ui)
+- **Swagger Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Health Check**: [http://localhost:8000/api/health](http://localhost:8000/api/health)
+
+---
+
+### Running with Docker
+
+Build and run the container locally:
+
+```bash
+docker compose up --build
+```
+
+The container automatically maps port `8000:8000` and configures local persistence volumes.
+
+---
+
+### Running Tests
+
+Execute the complete test suite (40 unit and integration tests):
+
 ```bash
 pytest -v
 ```
 
-Output:
-```text
-tests/test_api.py::test_get_file_info_endpoint PASSED
-tests/test_api.py::test_get_file_info_not_found PASSED
-tests/test_api.py::test_get_measurements_endpoint PASSED
-tests/test_api.py::test_get_measurements_not_found PASSED
-tests/test_api.py::test_list_files_endpoint PASSED
-tests/test_api.py::test_health_check_endpoint PASSED
-tests/test_api.py::test_root_endpoint PASSED
-tests/test_crs.py::test_normalize_crs PASSED
-tests/test_crs.py::test_format_crs_string PASSED
-tests/test_crs.py::test_utm_selection_northern_hemisphere PASSED
-tests/test_crs.py::test_utm_selection_southern_hemisphere PASSED
-tests/test_crs.py::test_utm_selection_polar_regions PASSED
-tests/test_crs.py::test_determine_optimal_projected_crs_already_projected PASSED
-tests/test_crs.py::test_geographic_crs_transformation_produces_metric_measurements PASSED
-tests/test_measurements.py::test_polygon_area_measurement PASSED
-tests/test_measurements.py::test_multipolygon_area_measurement PASSED
-tests/test_measurements.py::test_linestring_length_measurement PASSED
-tests/test_measurements.py::test_multilinestring_length_measurement PASSED
-tests/test_measurements.py::test_point_measurement_not_required PASSED
-tests/test_measurements.py::test_multipoint_measurement_not_required PASSED
-tests/test_measurements.py::test_unsupported_geometry_collection_graceful PASSED
-tests/test_measurements.py::test_null_or_empty_geometry_graceful PASSED
-tests/test_upload.py::test_upload_valid_kml PASSED
-tests/test_upload.py::test_upload_valid_shapefile_zip PASSED
-tests/test_upload.py::test_upload_empty_file PASSED
-tests/test_upload.py::test_upload_unsupported_file_extension PASSED
-tests/test_upload.py::test_upload_corrupted_zip PASSED
-tests/test_upload.py::test_upload_zip_missing_shp PASSED
-tests/test_upload.py::test_upload_invalid_kml PASSED
-tests/test_validation.py::test_validate_file_extension_valid PASSED
-tests/test_validation.py::test_validate_file_extension_invalid PASSED
-tests/test_validation.py::test_validate_file_size PASSED
-tests/test_validation.py::test_validate_zip_corrupted PASSED
-tests/test_validation.py::test_validate_zip_path_traversal PASSED
-tests/test_validation.py::test_locate_shapefile_missing_shp PASSED
-tests/test_validation.py::test_locate_shapefile_ambiguous_multiple_shp PASSED
-tests/test_validation.py::test_locate_shapefile_missing_components PASSED
-tests/test_validation.py::test_validate_kml_invalid_xml PASSED
-tests/test_validation.py::test_validate_kml_wrong_root PASSED
-
-============================= 39 passed in 0.73s ==============================
-```
-
-### Running the Live Verification Script
-To test live database insertion, file processing, and measurements using sample datasets:
+Execute the live end-to-end integration test runner:
 
 ```bash
 python scripts/verify_api_live.py
 ```
 
-### Running Linting & Code Quality
-```bash
-ruff check app tests scripts
-```
+---
+
+## Design Decisions & Alternatives
+
+| Decision | Implementation | Alternatives Considered & Rationale |
+| :--- | :--- | :--- |
+| **Framework** | **FastAPI 0.110+** | *Flask / Django*: Flask lacks native async streaming for large uploads and requires extra libraries for OpenAPI. Django is unnecessarily heavy for a dedicated measurement microservice. FastAPI provides native OpenAPI, Pydantic v2 validation, and async I/O. |
+| **Geospatial Engine** | **GeoPandas & PyOGRIO** | *Raw GDAL (`osgeo.ogr`)*: Raw GDAL has fragile bindings, steep memory management overhead in Python, and complicated platform compilation. GeoPandas with PyOGRIO provides vectorized C-level performance with Pythonic simplicity. |
+| **Projection Strategy** | **Centroid-Based UTM** | *Web Mercator (`EPSG:3857`)*: Web Mercator introduces severe areal distortion away from the equator (Greenland effect). Centroid-based UTM keeps local scale error $\le 0.1\%$, producing authoritative metric units ($m$ and $m^2$). |
+| **Database Architecture** | **SQLAlchemy 2.0 ORM** | *Direct PostGIS dependency*: Mandating PostGIS introduces heavy infrastructure requirements. The current architecture uses SQLAlchemy abstractions with standard types, allowing zero-dependency local SQLite execution and seamless PostgreSQL portability (`DATABASE_URL`). |
+| **Upload Security** | **Sandboxing & Zip-Slip Defense** | Files are extracted into isolated UUID directories. Every archive member is verified using `os.path.commonpath` to eliminate path traversal attacks, and temp files are cleaned up in `finally` blocks. |
+| **Geometry Handling** | **Graceful Status Model** | Rather than failing an entire file when encountering unsupported or non-measurable geometries (e.g. Points, MultiPoints), the system marks them `NOT_REQUIRED` or `NOT_SUPPORTED` and proceeds with calculating all valid features. |
 
 ---
 
-## 8. Design Decisions & Alternatives
+## Key Learnings
 
-### 1. Why FastAPI?
-- **Asynchronous Execution & Fast I/O**: Efficient streaming for file uploads without blocking the event loop.
-- **Native OpenAPI/Swagger Specification**: Automatic documentation and schema generation with zero extra boilerplate.
-- **Pydantic v2 Integration**: Native validation with high performance via Rust-compiled core.
-- *Alternatives Considered*: Flask (lacks native async, requires external libraries for OpenAPI and validation) and Django (unnecessarily heavyweight for a focused file measurement microservice).
-
-### 2. Why GeoPandas & PyOGRIO over Raw GDAL Bindings?
-- GeoPandas provides a clean, vectorized Pythonic interface wrapping underlying C libraries.
-- PyOGRIO provides high-performance vector file reading directly without the complex configuration overhead of OSGeo GDAL Python bindings.
-- *Alternatives Considered*: `osgeo.ogr` directly (error-prone memory management in Python, steep learning curve, fragile wheel installation across platforms).
-
-### 3. Why Centroid-Based UTM Zone Selection for Projected CRS?
-- UTM (Universal Transverse Mercator) minimizes conformal distortion within $6^\circ$ longitudinal zones ($\le 0.1\%$ scale error).
-- It provides a standardized, globally understood Cartesian coordinate system with metric units ($meters$ and $meters^2$).
-- Polar coordinates are automatically safeguarded with Universal Polar Stereographic (UPS).
-- *Alternatives Considered*: World Mercator (EPSG:3857) introduces severe areal distortion away from the equator (Greenland effect). Equal Earth / Cylindrical Equal Area preserves global area but distorts local linear distances significantly. Centroid-based local UTM is the industry standard for regional surveying.
-
-### 4. Database Strategy & Relational Model
-- **SQLAlchemy 2.0 ORM**: Implemented with portable types (`JSON`, `String`, `Float`).
-- **SQLite for Local Development, Seamless Postgres Portability**: The persistence layer uses standard SQLAlchemy abstractions without SQLite-specific dialects, allowing switching to PostgreSQL (`postgresql+psycopg2://...`) simply by changing the `DATABASE_URL` environment variable.
-- **Relational Metadata Storage vs PostGIS**: Geometries are parsed and converted to GeoJSON for client consumption, while calculations are executed in memory. This eliminates requiring a local PostGIS server while keeping deployment lightweight and self-contained.
-
-### 5. Defensive File Upload & Safe ZIP Extraction
-- **Zip-Slip Prevention**: Every path in an uploaded ZIP archive is validated using `os.path.commonpath` to prevent path traversal outside the sandbox extraction directory.
-- **Automatic Lifecycle Cleanup**: Extracted temporary shapefile files are automatically removed in `finally` blocks, preventing disk exhaustion.
-- **Sanitized UUID Storage Paths**: Files are saved under randomly generated UUID subdirectories rather than trusting client-provided filenames directly.
-
-### 6. Graceful Handling of Unsupported Geometries
-- If a dataset contains geometry types not requiring or supporting measurement (e.g., Points, MultiPoints, GeometryCollections), the pipeline does not raise an unhandled exception or fail the entire file.
-- It returns `status: "NOT_REQUIRED"` or `status: "NOT_SUPPORTED"` per feature and successfully calculates measurements for all supported features.
+1. **Geodetic vs. Planar Spatial Computation**: Direct Euclidean calculations on spherical coordinates (`EPSG:4326`) yield inaccurate, non-physical units ("square degrees"). Proper spatial engineering requires selecting regional conformal projected systems (UTM) based on geographic centroid coordinates.
+2. **Defensive Archive Ingestion**: Handling multi-file geospatial bundles (Shapefile `.shp`, `.shx`, `.dbf`, `.prj`) requires strict pre-extraction inspection to defend against Zip-Slip traversal, memory exhaustion, and missing companion components.
+3. **Pydantic v2 & FastAPI Production Patterns**: Leveraging typed response schemas, structured error envelopes, and automated OpenAPI documentation ensures predictable client-server contracts.
+4. **Resilient XML/KML Parsing**: Accounting for variations across KML namespace implementations (KML 2.2 schemas, nested Placemarks, and ExtendedData attributes) requires multi-tiered fallback strategies.
 
 ---
 
-## 9. Key Learnings
+## Future Scope
 
-1. **Geodetic vs. Projected Spatial Computation**: Understanding why measuring distances or areas directly in `EPSG:4326` produces invalid results, and mastering dynamic UTM zone projection algorithms.
-2. **Defensive Geospatial File Ingestion**: Handling ESRI Shapefile multi-file dependencies (`.shp`, `.shx`, `.dbf`, `.prj`) and preventing Zip-Slip vulnerabilities.
-3. **Pydantic v2 & FastAPI Architecture**: Designing structured error envelopes, strict response models, and clean separation between API routes, domain services, and persistence repositories.
-4. **Resilient KML Parsing**: Navigating differences between KML namespaces and implementing multi-tiered parser fallbacks.
-5. **Modern Python Standards**: Applying type annotations, SQLAlchemy 2.0 mapped columns, pytest fixtures, and Ruff linter configurations to achieve production-grade quality.
-
----
-
-## 10. Future Scope
-
-While the current implementation meets and exceeds all evaluation requirements, the modular architecture allows for straightforward future extensions:
-1. **Additional Geospatial Formats**: Support for GeoJSON, GeoPackage (`.gpkg`), FlatGeobuf, and DXF files.
-2. **Asynchronous Background Workers**: Integrating Celery, ARQ, or Redis Streams with background processing for multi-gigabyte spatial datasets.
-3. **PostGIS Spatial Database Integration**: Native PostGIS geometry column storage with spatial indexing (R-Tree / GiST) for spatial queries (bounding box intersection, spatial join).
-4. **Cloud Object Storage**: Direct presigned upload to AWS S3, Google Cloud Storage, or Azure Blob Storage.
-5. **Advanced Spatial Analytics**: Centroid calculation, convex hull generation, topological validation, and multi-polygon simplification.
-
----
-
-## 11. Git Submission Instructions
-
-To push this repository to your public GitHub account:
-
-1. **Initialize Git and commit**:
-   ```bash
-   git init
-   git add .
-   git commit -m "feat: complete Geospatial File Measurement API implementation"
-   ```
-
-2. **Create a public GitHub repository**:
-   - Go to [GitHub](https://github.com/new).
-   - Name the repository: `geospatial-file-measurement-api`.
-   - Set visibility to **Public**.
-   - Do NOT initialize with a README, .gitignore, or license (already present).
-
-3. **Push the repository**:
-   ```bash
-   git remote add origin https://github.com/<your-username>/geospatial-file-measurement-api.git
-   git branch -M main
-   git push -u origin main
-   ```
-
-4. **Verify GitHub link**:
-   Confirm that your public GitHub repository displays the `README.md`, codebase, and tests cleanly.
-
----
-
-**Author**: Senior Backend & Geospatial Engineer  
-**Evaluation**: Geospatial File Measurement API Placement Project
+1. **Additional Geospatial Formats**: Extend ingestion to GeoJSON, GeoPackage (`.gpkg`), FlatGeobuf, and CAD DXF.
+2. **Asynchronous Background Processing**: Introduce Celery or ARQ with Redis queues for long-running processing of multi-gigabyte spatial archives.
+3. **Native PostGIS Spatial Indexing**: Add PostGIS geometry columns with GiST spatial indexing for spatial query support (bounding box search, point-in-polygon, buffer intersection).
+4. **Direct Cloud Object Storage**: Support presigned direct uploads to AWS S3, Google Cloud Storage, or Azure Blob Storage.
+5. **Advanced Vector Geoprocessing**: Support convex hull generation, polygon simplification (Douglas-Peucker), and automated geometry repair.
